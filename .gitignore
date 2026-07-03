@@ -1,3 +1,14 @@
+# Ignore all data files
+data/raw/*.replay
+data/json/*.json
+data/processed/*.csv
+data/processed/*.parquet
+
+# keep a game for testing
+!data/raw/sample_game.replay
+!data/processed/sample_game.csv
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
