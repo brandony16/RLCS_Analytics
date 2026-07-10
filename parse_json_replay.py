@@ -1,6 +1,22 @@
 import json
 import pandas as pd
 import os
+import sys
+
+"""
+ETL Pipeline: Rocket League JSON to Tabular CSV
+-----------------------------------------------
+This script transforms hierarchical rrrocket JSON replay data into a 
+flat CSV suitable for data analysis (e.g., heatmaps, speed stats, xG models).
+
+Data Flow:
+1. Load raw JSON (with BOM handling).
+2. Pass 1 (Metadata Mapping): Link internal engine Actor IDs to Player Names.
+3. Pass 2 (Physics & State): Route per-actor updates to their parent entity 
+   (e.g., routing boost component data back to the Car).
+4. Post-Process (Forward Filling): Fill missing network snapshots to ensure 
+   every row has a continuous physics/boost state.
+"""
 
 
 def parse_and_save_replay(input_json_path, output_csv_path):
@@ -8,9 +24,12 @@ def parse_and_save_replay(input_json_path, output_csv_path):
     with open(input_json_path, "r", encoding="utf-8-sig") as file:
         data = json.load(file)
 
+    # Load metadata
     properties = data.get("properties", {})
     match_guid = properties.get("MatchGUID", "Unknown_Match")
-    expected_frames = properties.get("NumFrames", 0)
+    expected_frames = properties.get(
+        "NumFrames", 0
+    )  # used for confirming that parsing worked
 
     global_objects = data.get("objects", [])
 
@@ -23,7 +42,7 @@ def parse_and_save_replay(input_json_path, output_csv_path):
     car_to_pri = {}  # Car Actor ID -> PRI Actor ID
     component_to_car = {}  # Component Actor ID -> Car Actor ID
 
-    print(f"Parsing {len(network_frames)} network frames... this may take a moment.")
+    print(f"Parsing {len(network_frames)} network frames...")
     frames_parsed_count = 0
 
     for i, frame in enumerate(network_frames):
@@ -77,7 +96,6 @@ def parse_and_save_replay(input_json_path, output_csv_path):
                 continue
 
             if target_id not in frame_entities:
-                # Notice we removed actor_id from the row dictionary
                 frame_entities[target_id] = {
                     "match_guid": match_guid,
                     "time": time,
@@ -88,13 +106,12 @@ def parse_and_save_replay(input_json_path, output_csv_path):
 
             row = frame_entities[target_id]
 
+            # fill out physics data (location, speed, orientation)
             if "RigidBody" in attributes:
                 rb = attributes["RigidBody"]
                 loc = rb.get("location") or {}
                 rot = rb.get("rotation") or {}
                 lin_vel = rb.get("linear_velocity") or {}
-
-                # Removed angular velocity entirely
 
                 row.update(
                     {
@@ -111,6 +128,7 @@ def parse_and_save_replay(input_json_path, output_csv_path):
                 )
                 row["has_useful_data"] = True
 
+            # extract boost info
             if "ReplicatedBoost" in attributes:
                 boost_data = attributes["ReplicatedBoost"]
                 raw_boost = boost_data.get("boost_amount", 0)
@@ -123,10 +141,12 @@ def parse_and_save_replay(input_json_path, output_csv_path):
             ):
                 attribute_name = global_objects[actor.get("object_id")]
 
+            # see if the car is dodging
             if attribute_name == "TAGame.CarComponent_Dodge_TA:DodgeTorque":
                 row["is_dodging"] = 1
                 row["has_useful_data"] = True
 
+        # add row only if it has actual data
         for row in frame_entities.values():
             if row.pop("has_useful_data", False):
                 parsed_rows.append(row)
@@ -138,7 +158,10 @@ def parse_and_save_replay(input_json_path, output_csv_path):
 
     is_player = df["player_name"] != "Ball"
 
-    # Updated list of columns that represent continuous physical states (Removed ang_vel)
+    """
+    The json files only tell you when something updated, not what each value is continuously.
+    We therefore need to forward fill values to get an accurate picture of the state at each frame.
+    """
     continuous_cols = [
         "loc_x",
         "loc_y",
@@ -178,6 +201,7 @@ def parse_and_save_replay(input_json_path, output_csv_path):
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
     df.to_csv(output_csv_path, index=False)
 
+    # check that we have the same number of expected frames as parsed frames
     print("\n" + "=" * 40)
     print("      PARSING CHECKSUM & SUMMARY      ")
     print("=" * 40)
@@ -188,4 +212,8 @@ def parse_and_save_replay(input_json_path, output_csv_path):
     print("=" * 40 + "\n")
 
 
-parse_and_save_replay("data/json/sample_game.json", "data/processed/sample_game.csv")
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python script.py <input_json> <output_csv>")
+    else:
+        parse_and_save_replay(sys.argv[1], sys.argv[2])
