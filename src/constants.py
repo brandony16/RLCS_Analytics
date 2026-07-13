@@ -1,0 +1,10 @@
+# 1 UU = 1 cm
+# 2300cm/s = 82.8 kmh
+UU_CAR_MAX_SPEED = 2300
+KMH_CAR_MAX_SPEED = 82.8
+
+# X uu/s / 27.28 = Y KMH
+UU_TO_KMH_FACTOR = 1 / 27.78
+
+ORANGE_TEAM = 1
+BLUE_TEAM = 0
