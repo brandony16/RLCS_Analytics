@@ -65,7 +65,11 @@ def parse_and_save_replay(
     player_names: Dict[int, str] = {}  # PRI Actor ID -> String Name
     car_to_pri: Dict[int, int] = {}  # Car Actor ID -> PRI Actor ID
     component_to_car: Dict[int, int] = {}  # Component Actor ID -> Car Actor ID
-    demo_counts = {}  # PRI -> Total Demos
+
+    # NEW STATE TRACKING FOR DEMOS
+    # Tracks: (attacker_pri_id, victim_actor_id) -> last_demo_time_seconds
+    processed_demos: Dict[tuple[int, int], float] = {}
+    demo_counts: Dict[int, int] = {}  # PRI -> Total Demos
 
     print(f"Parsing {len(network_frames)} network frames...")
     frames_parsed_count: int = 0
@@ -102,16 +106,43 @@ def parse_and_save_replay(
                 parent_car_id = attributes.get("ActiveActor", {}).get("actor")
                 if parent_car_id is not None:
                     component_to_car[actor_id] = parent_car_id
+
             elif attribute_name == "TAGame.Car_TA:ReplicatedDemolishExtended":
                 attacker_pri_id = (
                     attributes.get("DemolishExtended", {})
                     .get("attacker_pri", {})
                     .get("actor")
                 )
-                if attacker_pri_id is not None and attacker_pri_id != -1:
-                    demo_counts[attacker_pri_id] = (
-                        demo_counts.get(attacker_pri_id, 0) + 1
-                    )
+
+                # actor id of victim (NOT their PRI)
+                victim = (
+                    attributes.get("DemolishExtended", {})
+                    .get("victim", {})
+                    .get("actor")
+                )
+
+                if (
+                    attacker_pri_id is not None
+                    and attacker_pri_id != -1
+                    and victim is not None
+                ):
+                    # Occasionally, demos will get broadcasted twice in the frame data
+                    # We therefore need to filter our unique demos to ensure our stats are accurate
+                    # Every demo event has an attacker pri and the id of the victims car (NOT their PRI)
+                    # which we can use to id the demo.
+
+                    # Unique fingerprint using attacker PRI and victim temporary Car ID
+                    demo_key = (attacker_pri_id, victim)
+                    last_seen_time = processed_demos.get(demo_key)
+
+                    # We also track the time since the demo in case an id happens to be reused and a different demo
+                    # with the same attacker and victim ids happens again. If more than 5 seconds, we can be confident
+                    # that this is a new demo and can track it
+                    if last_seen_time is None or (time - last_seen_time > 5.0):
+                        demo_counts[attacker_pri_id] = (
+                            demo_counts.get(attacker_pri_id, 0) + 1
+                        )
+                        processed_demos[demo_key] = time
 
         # Pass 2: Extract data now that links are updated
         for actor in frame.get("updated_actors", []):
@@ -207,6 +238,8 @@ def parse_and_save_replay(
         "lin_vel_z",
         "boost_amount",
     ]
+
+    print(player_names)
 
     # Fill dodge with 0 if not present
     if "is_dodging" in df.columns:
