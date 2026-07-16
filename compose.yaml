@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: rl_analytics_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret_password
+      POSTGRES_DB: rl_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rl_network
+
+  # Python Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rl_analytics_backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:secret_password@db:5432/rl_analytics
+    depends_on:
+      - db
+    networks:
+      - rl_network
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development # Explicitly runs Stage 1 for active development
+    container_name: rl_analytics_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Prevents local node_modules from overwriting container's packages
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - rl_network
+
+volumes:
+  pgdata:
+
+networks:
+  rl_network:
+    driver: bridge
