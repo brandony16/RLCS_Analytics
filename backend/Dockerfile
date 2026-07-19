@@ -8,6 +8,13 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN wget https://github.com/nickbabcock/rrrocket/releases/download/v0.11.5/rrrocket-0.11.5-x86_64-unknown-linux-musl.tar.gz \
+    && tar -xzf rrrocket-0.11.5-x86_64-unknown-linux-musl.tar.gz \
+    && mv rrrocket /usr/local/bin/rrrocket \
+    && chmod +x /usr/local/bin/rrrocket \
+    && rm rrrocket-0.11.5-x86_64-unknown-linux-musl.tar.gz
+
+
 # Copy dependencies list
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

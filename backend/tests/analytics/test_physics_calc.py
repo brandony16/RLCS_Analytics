@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from backend.src.features.physics_calc import calculate_speeds, filter_impossible_speeds
+from backend.src.analytics.features.physics_calc import calculate_speeds, filter_impossible_speeds
 
 def test_speed_calculation():
     """

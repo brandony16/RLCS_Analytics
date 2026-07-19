@@ -1,12 +1,12 @@
 # Ignore all data files
-backend/data/raw/*.replay
-backend/data/json/*.json
-backend/data/processed/*.csv
-backend/data/processed/*.parquet
+data/raw/*.replay
+data/json/*.json
+data/processed/*.csv
+data/processed/*.parquet
 
 # keep a game for testing
-# !backend/data/raw/sample_game.replay
-# !backend/data/processed/sample_game.csv
+# !data/raw/sample_game.replay
+# !data/processed/sample_game.csv
 
 # Python environment
 __pycache__/

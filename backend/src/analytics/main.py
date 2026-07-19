@@ -1,6 +1,6 @@
 import argparse
 import pandas as pd
-from backend.src.features.scoreboard import get_detailed_scoreboard, print_scoreboard
+from backend.src.analytics.features.scoreboard import get_detailed_scoreboard, print_scoreboard
 
 
 def main():

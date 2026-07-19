@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from backend.src import constants as C
+from backend.src.analytics import constants as C
 
 
 def calculate_speeds(df: pd.DataFrame):

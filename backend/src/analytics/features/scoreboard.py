@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from typing import Dict, List, Any
-from backend.src.constants import ORANGE_TEAM, BLUE_TEAM
+from backend.src.analytics.constants import ORANGE_TEAM, BLUE_TEAM
 
 
 def flatten_player_stats(
