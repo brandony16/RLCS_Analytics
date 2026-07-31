@@ -24,7 +24,7 @@ def save_match_to_db(
         map_name=map_name,
     )
 
-    # 3. Create PlayerScoreboard objects
+    # Create PlayerScoreboard objects
     for player in flattened_stats:
         player_score = PlayerScoreboard(
             player_name=player.get("player_name", "Unknown"),
