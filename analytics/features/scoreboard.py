@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from typing import Dict, List, Any
-from src.analytics.constants import ORANGE_TEAM, BLUE_TEAM
+from constants import ORANGE_TEAM, BLUE_TEAM
 
 
 def flatten_player_stats(
@@ -28,7 +28,7 @@ def flatten_player_stats(
                 "assists": player.get("Assists", 0),
                 "saves": player.get("Saves", 0),
                 "shots": player.get("Shots", 0),
-                "demos": player_demos or 0,  # New Column!
+                "demos": player_demos or 0,
             }
         )
     return flattened

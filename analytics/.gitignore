@@ -1,0 +1,34 @@
+# Ignore all data files
+data/raw/*.replay
+data/json/*.json
+data/processed/*.csv
+data/processed/*.parquet
+
+# keep a game for testing
+# !data/raw/sample_game.replay
+# !data/processed/sample_game.csv
+
+# Python environment
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+venv/
+.venv/
+
+# Node environment
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.svelte-kit/
+dist/
+
+# Local Data Storage
+data/
+pgdata/
+
+# OS and IDE files
+.DS_Store
+.vscode/
+.idea/
+.env

@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.analytics.features.scoreboard import flatten_player_stats
+from analytics.features.scoreboard import flatten_player_stats
 from src.db.database import get_db
 from src.db.services import save_match_to_db
 

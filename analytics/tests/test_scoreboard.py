@@ -1,4 +1,4 @@
-from src.analytics.features.scoreboard import flatten_player_stats
+from features.scoreboard import flatten_player_stats
 
 
 def test_flatten_player_stats():
