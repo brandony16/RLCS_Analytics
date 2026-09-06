@@ -1,7 +1,14 @@
 import argparse
 import pandas as pd
 from features.scoreboard import get_detailed_scoreboard, print_scoreboard
-from features.aggregation import generate_frame_stats, print_frame_stats, show_boost_by_player_graph
+from features.aggregation import (
+    generate_frame_stats,
+    print_frame_stats,
+    show_boost_by_player_graph,
+)
+from typing import Dict, List, Any
+import json
+
 
 def main():
     parser = argparse.ArgumentParser(description="Rocket League Analytics Pipeline")
@@ -25,12 +32,15 @@ def main():
     print_scoreboard(scoreboard_df)
 
     # 2. Add Physics Stats (To be implemented)
+    with open(metadata_path, "r", encoding="utf-8") as f:
+        data: Dict[str, Any] = json.load(f)
+    goals = data.get("properties", {}).get("Goals", [])
+
     df_frames = pd.read_csv(frames_path)
     calcuated_stats = generate_frame_stats(df_frames)
     print_frame_stats(calcuated_stats)
-    # final_report = merge_physics_with_scoreboard(scoreboard_df, df_physics)
 
-    show_boost_by_player_graph(df_frames)
+    show_boost_by_player_graph(df_frames, goals)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 if [ -z "$1" ]; then
     echo "Usage: ./scripts/process_replay.sh <path-to-replay>.replay" >&2
     exit 1
-fi
+
 
 REPLAY_FILE=$1
 

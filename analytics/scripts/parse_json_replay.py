@@ -65,8 +65,8 @@ def parse_and_save_replay(
     player_names: Dict[int, str] = {}  # PRI Actor ID -> String Name
     car_to_pri: Dict[int, int] = {}  # Car Actor ID -> PRI Actor ID
     component_to_car: Dict[int, int] = {}  # Component Actor ID -> Car Actor ID
+    game_time = 0.0
 
-    # NEW STATE TRACKING FOR DEMOS
     # Tracks: (attacker_pri_id, victim_actor_id) -> last_demo_time_seconds
     processed_demos: Dict[tuple[int, int], float] = {}
     demo_counts: Dict[int, int] = {}  # PRI -> Total Demos
@@ -82,6 +82,9 @@ def parse_and_save_replay(
         delta: float = frame.get("delta", 0.0)
         frames_parsed_count += 1
 
+        if i > 0:
+            game_time += delta
+
         frame_entities: Dict[int, Dict[str, Any]] = {}
 
         # Pass 1: Update all network links first
@@ -93,20 +96,16 @@ def parse_and_save_replay(
             attribute_name: str = ""
             if object_id is not None and object_id < len(global_objects):
                 attribute_name = global_objects[object_id]
-
             if attribute_name == "Engine.PlayerReplicationInfo:PlayerName":
                 player_names[actor_id] = attributes.get("String", "Unknown")
-
             elif attribute_name == "Engine.Pawn:PlayerReplicationInfo":
                 pri_id = attributes.get("ActiveActor", {}).get("actor")
                 if pri_id is not None:
                     car_to_pri[actor_id] = pri_id
-
             elif attribute_name == "TAGame.CarComponent_TA:Vehicle":
                 parent_car_id = attributes.get("ActiveActor", {}).get("actor")
                 if parent_car_id is not None:
                     component_to_car[actor_id] = parent_car_id
-
             elif attribute_name == "TAGame.Car_TA:ReplicatedDemolishExtended":
                 attacker_pri_id = (
                     attributes.get("DemolishExtended", {})
@@ -159,6 +158,24 @@ def parse_and_save_replay(
             else:
                 player_name = "Ball"
 
+            if i == 6582 and delta == 0 and "ReplicatedBoost" in attributes:
+                car_id = component_to_car.get(actor_id)
+                pri = car_to_pri.get(car_id)
+                name = player_names.get(pri)
+
+                print(f"""
+          RESET BOOST
+            frame: {i}
+            actor: {actor_id}
+            object: {object_id}
+            object_name: {attribute_name}
+            boost: {attributes["ReplicatedBoost"].get("boost_amount")}
+
+            component -> car: {car_id}
+            car -> PRI: {pri}
+            PRI -> name: {name}
+          """)
+
             # Skip Ghost entities and Replay Camera artifacts
             if "Loading_Name_" in player_name:
                 continue
@@ -166,8 +183,10 @@ def parse_and_save_replay(
             if target_id not in frame_entities:
                 frame_entities[target_id] = {
                     "match_guid": match_guid,
+                    "frame": i,
                     "time": time,
                     "delta": delta,
+                    "game_time": game_time,
                     "player_name": player_name,
                     "has_useful_data": False,
                 }
@@ -270,6 +289,7 @@ def parse_and_save_replay(
     save_metadata(data, match_guid, output_dir)
 
     df = df.sort_values(by=["time"])
+    df["time"] = df["time"] - df["time"].iloc[0]
 
     os.makedirs(output_dir, exist_ok=True)
     df.to_csv(csv_output_path, index=False)

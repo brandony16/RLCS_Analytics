@@ -32,3 +32,6 @@ pgdata/
 .vscode/
 .idea/
 .env
+
+notes.md
+test.json
