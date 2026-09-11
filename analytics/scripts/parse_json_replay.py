@@ -10,7 +10,6 @@ import pandas as pd
 @dataclass
 class ActorObservation:
     """Useful actor data that can be resolved after a delayed network link."""
-
     frame: int
     time: float
     delta: float
@@ -20,11 +19,17 @@ class ActorObservation:
     attributes: Dict[str, Any]
 
 
-def save_metadata(raw_data: Dict[str, Any], match_guid: str, output_dir: str) -> str:
+def save_metadata(
+    raw_data: Dict[str, Any],
+    match_guid: str,
+    output_dir: str,
+    events: List[Dict[str, Any]],
+) -> str:
     metadata: Dict[str, Any] = {
         "properties": raw_data.get("properties", {}),
         "tick_marks": raw_data.get("tick_marks", []),
         "demos": raw_data.get("demos", {}),
+        "events": events,
     }
     metadata_path = os.path.join(output_dir, f"{match_guid}_metadata.json")
     os.makedirs(output_dir, exist_ok=True)
@@ -157,19 +162,73 @@ def add_observation_to_row(
         row["has_useful_data"] = True
 
 
+def build_event_metadata(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Build one event stream, using tick-mark frames for goal timing."""
+    goals = data.get("properties", {}).get("Goals", [])
+    goal_index = 0
+    events: List[Dict[str, Any]] = []
+
+    for tick_mark in data.get("tick_marks", []):
+        description = tick_mark.get("description", "")
+        tick_frame = tick_mark.get("frame")
+        if "Goal" in description and goal_index < len(goals):
+            goal = goals[goal_index]
+            goal_index += 1
+            events.append(
+                {
+                    "type": "goal",
+                    "frame": tick_frame,
+                    "description": description,
+                    "player_name": goal.get("PlayerName"),
+                    "team": goal.get("PlayerTeam"),
+                    "metadata_frame": goal.get("frame"),
+                }
+            )
+        else:
+            events.append(
+                {
+                    "type": "tick_mark",
+                    "frame": tick_frame,
+                    "description": description,
+                }
+            )
+
+    # Preserve scorer records if a replay has goal metadata without tick marks.
+    for goal in goals[goal_index:]:
+        events.append(
+            {
+                "type": "goal",
+                "frame": goal.get("frame"),
+                "player_name": goal.get("PlayerName"),
+                "team": goal.get("PlayerTeam"),
+                "metadata_frame": goal.get("frame"),
+            }
+        )
+
+    return events
+
+
 def parse_network_frames(
     data: Dict[str, Any], match_guid: str
-) -> Tuple[List[Dict[str, Any]], Dict[int, str], Dict[int, int], int]:
+) -> Tuple[
+    List[Dict[str, Any]],
+    Dict[int, str],
+    Dict[int, int],
+    List[Dict[str, Any]],
+    int,
+]:
     global_objects: List[str] = data.get("objects", [])
     network_frames: List[Dict[str, Any]] = data.get("network_frames", {}).get("frames", [])
     player_names: Dict[int, str] = {}
     car_to_pri: Dict[int, int] = {}
     component_to_car: Dict[int, int] = {}
+    last_known_car_to_pri: Dict[int, int] = {}
     actor_object_names: Dict[int, str] = {}
     pending_observations: List[ActorObservation] = []
     rows: Dict[Tuple[int, int], Dict[str, Any]] = {}
     processed_demos: Dict[Tuple[int, int], float] = {}
     demo_counts: Dict[int, int] = {}
+    events = build_event_metadata(data)
     game_time = 0.0
 
     print(f"Parsing {len(network_frames)} network frames...")
@@ -179,9 +238,25 @@ def parse_network_frames(
         if frame_index > 0:
             game_time += delta
 
+        if delta == 0 and frame.get("deleted_actors"):
+            events.append(
+                {
+                    "type": "reset",
+                    "frame": frame_index,
+                    "time": time,
+                    "game_time": game_time,
+                    "deleted_actor_count": len(frame["deleted_actors"]),
+                }
+            )
+
+        # remove deleted actors
         for deleted_actor in frame.get("deleted_actors", []):
             deleted_id = actor_id_from_deleted_actor(deleted_actor)
             if deleted_id is not None:
+                last_known_car_to_pri.pop(deleted_id, None)
+                for car_id, pri_id in list(last_known_car_to_pri.items()):
+                    if pri_id == deleted_id:
+                        last_known_car_to_pri.pop(car_id, None)
                 remove_actor_links(
                     deleted_id,
                     player_names,
@@ -190,6 +265,7 @@ def parse_network_frames(
                     actor_object_names,
                 )
 
+        # add new actors
         for actor in frame.get("new_actors", []):
             actor_id = actor.get("actor_id")
             if actor_id is not None:
@@ -197,21 +273,15 @@ def parse_network_frames(
                     global_objects, actor.get("object_id")
                 )
 
+        # update actors
         updated_observations: List[ActorObservation] = []
         for actor in frame.get("updated_actors", []):
             actor_id: int = actor.get("actor_id")
             attributes: Dict[str, Any] = actor.get("attribute", {})
             attribute_name = object_name(global_objects, actor.get("object_id"))
             actor_object_names.setdefault(actor_id, attribute_name)
-            apply_link_update(
-                actor_id,
-                attribute_name,
-                attributes,
-                player_names,
-                car_to_pri,
-                component_to_car,
-            )
 
+            # Save any demos that happen so they can be put into metadata
             if attribute_name == "TAGame.Car_TA:ReplicatedDemolishExtended":
                 demolish_data = attributes.get("DemolishExtended", {})
                 attacker_pri_id = demolish_data.get("attacker_pri", {}).get("actor")
@@ -222,6 +292,35 @@ def parse_network_frames(
                     if last_seen_time is None or time - last_seen_time > 5.0:
                         demo_counts[attacker_pri_id] = demo_counts.get(attacker_pri_id, 0) + 1
                         processed_demos[demo_key] = time
+                        victim_pri_id = car_to_pri.get(
+                            victim_id, last_known_car_to_pri.get(victim_id)
+                        )
+                        events.append(
+                            {
+                                "type": "demo",
+                                "frame": frame_index,
+                                "time": time,
+                                "game_time": game_time,
+                                "attacker_pri_id": attacker_pri_id,
+                                "attacker_name": player_names.get(attacker_pri_id),
+                                "victim_car_id": victim_id,
+                                "victim_pri_id": victim_pri_id,
+                                "victim_name": player_names.get(victim_pri_id),
+                            }
+                        )
+
+            apply_link_update(
+                actor_id,
+                attribute_name,
+                attributes,
+                player_names,
+                car_to_pri,
+                component_to_car,
+            )
+            if attribute_name == "Engine.Pawn:PlayerReplicationInfo":
+                pri_id = active_actor_id(attributes)
+                if pri_id is not None:
+                    last_known_car_to_pri[actor_id] = pri_id
 
             if is_useful_observation(attribute_name, attributes):
                 updated_observations.append(
@@ -236,6 +335,7 @@ def parse_network_frames(
                     )
                 )
 
+        # resolve any observations
         observations = pending_observations + updated_observations
         pending_observations = []
         for observation in observations:
@@ -246,6 +346,8 @@ def parse_network_frames(
                 component_to_car,
                 player_names,
             )
+
+            # no link yet -> store for later linking
             if resolved is None:
                 pending_observations.append(observation)
                 continue
@@ -272,7 +374,8 @@ def parse_network_frames(
             "could not be linked to a player or ball."
         )
     parsed_rows = [row for row in rows.values() if row.pop("has_useful_data", False)]
-    return parsed_rows, player_names, demo_counts, len(network_frames)
+    events.sort(key=lambda event: (event.get("frame") is None, event.get("frame", 0)))
+    return parsed_rows, player_names, demo_counts, events, len(network_frames)
 
 
 def parse_and_save_replay(
@@ -286,9 +389,13 @@ def parse_and_save_replay(
     match_guid: str = properties.get("MatchGUID", "Unknown_Match")
     expected_frames: int = properties.get("NumFrames", 0)
     csv_output_path = os.path.join(output_dir, f"{match_guid}_frames.csv")
-    parsed_rows, player_names, demo_counts, frames_parsed_count = parse_network_frames(
-        data, match_guid
-    )
+    (
+        parsed_rows,
+        player_names,
+        demo_counts,
+        events,
+        frames_parsed_count,
+    ) = parse_network_frames(data, match_guid)
     df = pd.DataFrame(parsed_rows)
 
     print("Applying forward fill to continuous player state data...")
@@ -316,7 +423,7 @@ def parse_and_save_replay(
         player_names.get(pri_id, f"Unknown_{pri_id}"): count
         for pri_id, count in demo_counts.items()
     }
-    save_metadata(data, match_guid, output_dir)
+    save_metadata(data, match_guid, output_dir, events)
     df = df.sort_values(by=["time"])
     df["time"] = df["time"] - df["time"].iloc[0]
     os.makedirs(output_dir, exist_ok=True)
