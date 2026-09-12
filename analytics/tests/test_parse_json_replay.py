@@ -1,4 +1,4 @@
-from scripts.parse_json_replay import parse_network_frames
+from src.parsing.replay_parser import parse_network_frames
 
 
 def test_observation_waits_for_delayed_component_and_player_links():

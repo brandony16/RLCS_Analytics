@@ -1,4 +1,4 @@
-from features.scoreboard import flatten_player_stats
+from src.analysis.scoreboard import flatten_player_stats
 
 
 def test_flatten_player_stats():

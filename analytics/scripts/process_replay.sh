@@ -24,6 +24,6 @@ echo "Finished rrrocket parsing"
 echo "Starting json parsing"
 
 # 2. Run Python Parser
-python ./scripts/parse_json_replay.py "$JSON_FILE"
+python -m src.parsing.cli "$JSON_FILE"
 
 echo "Done!"

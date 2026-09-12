@@ -1,22 +1,20 @@
 import json
 import os
-import sys
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-
-@dataclass
-class ActorObservation:
-    """Useful actor data that can be resolved after a delayed network link."""
-    frame: int
-    time: float
-    delta: float
-    game_time: float
-    actor_id: int
-    attribute_name: str
-    attributes: Dict[str, Any]
+from src.domain.models import ActorObservation
+from src.parsing.actor_links import (
+    active_actor_id,
+    actor_id_from_deleted_actor,
+    apply_link_update,
+    object_name,
+    remove_actor_links,
+    resolve_observation,
+)
+from src.parsing.events import add_demo_event, add_reset_event, build_event_metadata
+from src.parsing.frame_rows import add_observation_to_row, is_useful_observation
 
 
 def save_metadata(
@@ -25,7 +23,7 @@ def save_metadata(
     output_dir: str,
     events: List[Dict[str, Any]],
 ) -> str:
-    metadata: Dict[str, Any] = {
+    metadata = {
         "properties": raw_data.get("properties", {}),
         "tick_marks": raw_data.get("tick_marks", []),
         "demos": raw_data.get("demos", {}),
@@ -36,176 +34,6 @@ def save_metadata(
     with open(metadata_path, "w", encoding="utf-8") as file:
         json.dump(metadata, file, indent=2)
     return metadata_path
-
-
-def object_name(global_objects: List[str], object_id: Optional[int]) -> str:
-    if object_id is None or object_id < 0 or object_id >= len(global_objects):
-        return ""
-    return global_objects[object_id]
-
-
-def actor_id_from_deleted_actor(actor: Any) -> Optional[int]:
-    if isinstance(actor, dict):
-        return actor.get("actor_id")
-    if isinstance(actor, int):
-        return actor
-    return None
-
-
-def active_actor_id(attributes: Dict[str, Any]) -> Optional[int]:
-    active_actor = attributes.get("ActiveActor", {})
-    if not active_actor or active_actor.get("active") is False:
-        return None
-    actor_id = active_actor.get("actor")
-    if actor_id is None or actor_id < 0:
-        return None
-    return actor_id
-
-
-def remove_actor_links(
-    actor_id: int,
-    player_names: Dict[int, str],
-    car_to_pri: Dict[int, int],
-    component_to_car: Dict[int, int],
-    actor_object_names: Dict[int, str],
-) -> None:
-    player_names.pop(actor_id, None)
-    car_to_pri.pop(actor_id, None)
-    component_to_car.pop(actor_id, None)
-    for component_id, car_id in list(component_to_car.items()):
-        if car_id == actor_id:
-            component_to_car.pop(component_id, None)
-    for car_id, pri_id in list(car_to_pri.items()):
-        if pri_id == actor_id:
-            car_to_pri.pop(car_id, None)
-    actor_object_names.pop(actor_id, None)
-
-
-def apply_link_update(
-    actor_id: int,
-    attribute_name: str,
-    attributes: Dict[str, Any],
-    player_names: Dict[int, str],
-    car_to_pri: Dict[int, int],
-    component_to_car: Dict[int, int],
-) -> None:
-    if attribute_name == "Engine.PlayerReplicationInfo:PlayerName":
-        player_names[actor_id] = attributes.get("String", "Unknown")
-    elif attribute_name == "Engine.Pawn:PlayerReplicationInfo":
-        pri_id = active_actor_id(attributes)
-        if pri_id is None:
-            car_to_pri.pop(actor_id, None)
-        else:
-            car_to_pri[actor_id] = pri_id
-    elif attribute_name == "TAGame.CarComponent_TA:Vehicle":
-        parent_car_id = active_actor_id(attributes)
-        if parent_car_id is None:
-            component_to_car.pop(actor_id, None)
-        else:
-            component_to_car[actor_id] = parent_car_id
-
-
-def is_useful_observation(attribute_name: str, attributes: Dict[str, Any]) -> bool:
-    return (
-        "RigidBody" in attributes
-        or "ReplicatedBoost" in attributes
-        or attribute_name == "TAGame.CarComponent_Dodge_TA:DodgeTorque"
-    )
-
-
-def resolve_observation(
-    observation: ActorObservation,
-    actor_object_names: Dict[int, str],
-    car_to_pri: Dict[int, int],
-    component_to_car: Dict[int, int],
-    player_names: Dict[int, str],
-) -> Optional[Tuple[int, str]]:
-    actor_id = observation.actor_id
-    target_id = component_to_car.get(actor_id, actor_id)
-    pri_id = car_to_pri.get(target_id)
-    if pri_id is not None and pri_id in player_names:
-        return target_id, player_names[pri_id]
-    if actor_object_names.get(actor_id, "").startswith("Archetypes.Ball."):
-        return target_id, "Ball"
-    return None
-
-
-def add_observation_to_row(
-    row: Dict[str, Any], observation: ActorObservation
-) -> None:
-    attributes = observation.attributes
-    if "RigidBody" in attributes:
-        rigid_body = attributes["RigidBody"]
-        location = rigid_body.get("location") or {}
-        rotation = rigid_body.get("rotation") or {}
-        linear_velocity = rigid_body.get("linear_velocity") or {}
-        row.update(
-            {
-                "loc_x": location.get("x"),
-                "loc_y": location.get("y"),
-                "loc_z": location.get("z"),
-                "rot_x": rotation.get("x"),
-                "rot_y": rotation.get("y"),
-                "rot_z": rotation.get("z"),
-                "lin_vel_x": linear_velocity.get("x"),
-                "lin_vel_y": linear_velocity.get("y"),
-                "lin_vel_z": linear_velocity.get("z"),
-            }
-        )
-        row["has_useful_data"] = True
-    if "ReplicatedBoost" in attributes:
-        raw_boost = attributes["ReplicatedBoost"].get("boost_amount", 0)
-        row["boost_amount"] = round((raw_boost / 255.0) * 100, 2)
-        row["has_useful_data"] = True
-    if observation.attribute_name == "TAGame.CarComponent_Dodge_TA:DodgeTorque":
-        row["is_dodging"] = 1
-        row["has_useful_data"] = True
-
-
-def build_event_metadata(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Build one event stream, using tick-mark frames for goal timing."""
-    goals = data.get("properties", {}).get("Goals", [])
-    goal_index = 0
-    events: List[Dict[str, Any]] = []
-
-    for tick_mark in data.get("tick_marks", []):
-        description = tick_mark.get("description", "")
-        tick_frame = tick_mark.get("frame")
-        if "Goal" in description and goal_index < len(goals):
-            goal = goals[goal_index]
-            goal_index += 1
-            events.append(
-                {
-                    "type": "goal",
-                    "frame": tick_frame,
-                    "description": description,
-                    "player_name": goal.get("PlayerName"),
-                    "team": goal.get("PlayerTeam"),
-                    "metadata_frame": goal.get("frame"),
-                }
-            )
-        else:
-            events.append(
-                {
-                    "type": "tick_mark",
-                    "frame": tick_frame,
-                    "description": description,
-                }
-            )
-
-    # Preserve scorer records if a replay has goal metadata without tick marks.
-    for goal in goals[goal_index:]:
-        events.append(
-            {
-                "type": "goal",
-                "frame": goal.get("frame"),
-                "player_name": goal.get("PlayerName"),
-                "team": goal.get("PlayerTeam"),
-                "metadata_frame": goal.get("frame"),
-            }
-        )
-
-    return events
 
 
 def parse_network_frames(
@@ -238,19 +66,11 @@ def parse_network_frames(
         if frame_index > 0:
             game_time += delta
 
-        if delta == 0 and frame.get("deleted_actors"):
-            events.append(
-                {
-                    "type": "reset",
-                    "frame": frame_index,
-                    "time": time,
-                    "game_time": game_time,
-                    "deleted_actor_count": len(frame["deleted_actors"]),
-                }
-            )
+        deleted_actors = frame.get("deleted_actors", [])
+        if delta == 0 and deleted_actors:
+            add_reset_event(events, frame_index, time, game_time, len(deleted_actors))
 
-        # remove deleted actors
-        for deleted_actor in frame.get("deleted_actors", []):
+        for deleted_actor in deleted_actors:
             deleted_id = actor_id_from_deleted_actor(deleted_actor)
             if deleted_id is not None:
                 last_known_car_to_pri.pop(deleted_id, None)
@@ -265,7 +85,6 @@ def parse_network_frames(
                     actor_object_names,
                 )
 
-        # add new actors
         for actor in frame.get("new_actors", []):
             actor_id = actor.get("actor_id")
             if actor_id is not None:
@@ -273,7 +92,6 @@ def parse_network_frames(
                     global_objects, actor.get("object_id")
                 )
 
-        # update actors
         updated_observations: List[ActorObservation] = []
         for actor in frame.get("updated_actors", []):
             actor_id: int = actor.get("actor_id")
@@ -281,7 +99,6 @@ def parse_network_frames(
             attribute_name = object_name(global_objects, actor.get("object_id"))
             actor_object_names.setdefault(actor_id, attribute_name)
 
-            # Save any demos that happen so they can be put into metadata
             if attribute_name == "TAGame.Car_TA:ReplicatedDemolishExtended":
                 demolish_data = attributes.get("DemolishExtended", {})
                 attacker_pri_id = demolish_data.get("attacker_pri", {}).get("actor")
@@ -295,18 +112,16 @@ def parse_network_frames(
                         victim_pri_id = car_to_pri.get(
                             victim_id, last_known_car_to_pri.get(victim_id)
                         )
-                        events.append(
-                            {
-                                "type": "demo",
-                                "frame": frame_index,
-                                "time": time,
-                                "game_time": game_time,
-                                "attacker_pri_id": attacker_pri_id,
-                                "attacker_name": player_names.get(attacker_pri_id),
-                                "victim_car_id": victim_id,
-                                "victim_pri_id": victim_pri_id,
-                                "victim_name": player_names.get(victim_pri_id),
-                            }
+                        add_demo_event(
+                            events,
+                            frame_index,
+                            time,
+                            game_time,
+                            attacker_pri_id,
+                            player_names.get(attacker_pri_id),
+                            victim_id,
+                            victim_pri_id,
+                            player_names.get(victim_pri_id),
                         )
 
             apply_link_update(
@@ -335,7 +150,6 @@ def parse_network_frames(
                     )
                 )
 
-        # resolve any observations
         observations = pending_observations + updated_observations
         pending_observations = []
         for observation in observations:
@@ -346,11 +160,10 @@ def parse_network_frames(
                 component_to_car,
                 player_names,
             )
-
-            # no link yet -> store for later linking
             if resolved is None:
                 pending_observations.append(observation)
                 continue
+
             target_id, player_name = resolved
             row_key = (observation.frame, target_id)
             if row_key not in rows:
@@ -373,6 +186,7 @@ def parse_network_frames(
             f"Warning: {len(pending_observations)} useful observations "
             "could not be linked to a player or ball."
         )
+
     parsed_rows = [row for row in rows.values() if row.pop("has_useful_data", False)]
     events.sort(key=lambda event: (event.get("frame") is None, event.get("frame", 0)))
     return parsed_rows, player_names, demo_counts, events, len(network_frames)
@@ -389,13 +203,9 @@ def parse_and_save_replay(
     match_guid: str = properties.get("MatchGUID", "Unknown_Match")
     expected_frames: int = properties.get("NumFrames", 0)
     csv_output_path = os.path.join(output_dir, f"{match_guid}_frames.csv")
-    (
-        parsed_rows,
-        player_names,
-        demo_counts,
-        events,
-        frames_parsed_count,
-    ) = parse_network_frames(data, match_guid)
+    parsed_rows, player_names, demo_counts, events, frames_parsed_count = parse_network_frames(
+        data, match_guid
+    )
     df = pd.DataFrame(parsed_rows)
 
     print("Applying forward fill to continuous player state data...")
@@ -434,10 +244,3 @@ def parse_and_save_replay(
     print(f"Expected Frames: {expected_frames}")
     print(f"Actual Frames Parsed: {frames_parsed_count}")
     print(f"Total Useful Rows: {len(df)}")
-
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python script.py <input_json>")
-    else:
-        parse_and_save_replay(sys.argv[1])

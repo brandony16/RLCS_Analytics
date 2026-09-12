@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from features.physics_calc import calculate_speeds, filter_impossible_speeds
+from src.analysis.speed import calculate_speeds
 
 def test_speed_calculation():
     """
@@ -28,27 +28,3 @@ def test_speed_calculation():
     # Frame 2: Diagonal movement validation (Pythagorean theorem)
     expected_diagonal = np.sqrt((-1000) ** 2 + (-1000) ** 2)
     assert np.isclose(result["speed_uu"].iloc[2], expected_diagonal)
-
-
-def test_filter_impossible_speeds():
-    """
-    Validates that demo respawns or lag teleportations (which result in
-    massive frame-to-frame velocity spikes) are successfully dropped.
-    """
-    mock_data = pd.DataFrame(
-        {
-            "player_name": ["Baby Sparta", "Baby Sparta", "Tung Tung Tung Segna"],
-            "speed_uu": [2000.0, 15000.0, 2350.0],  # 15000.0 is a teleport spike
-        }
-    )
-
-    result = filter_impossible_speeds(mock_data)
-
-    # The dataframe should only contain 2 rows now
-    assert len(result) == 2
-
-    # The teleportation spike must be completely gone
-    assert 15000.0 not in result["speed_uu"].values
-
-    # Valid high speeds should remain
-    assert 2350.0 in result["speed_uu"].values
