@@ -5,30 +5,39 @@ from typing import List
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from src.visualization.overlays import draw_rl_pitch, playable_area_mask
+from math import ceil
 from constants import (
     FIELD_X,
     FIELD_Y,
     GOAL_DEPTH,
 )
 
+
 def show_player_position_heatmaps(player_names: List[str], df: DataFrame):
     if not player_names:
         return
 
+    n_cols = min(3, len(player_names))
+    n_rows = ceil(len(player_names) / n_cols)
+
     fig, axes = plt.subplots(
-        1,
-        len(player_names),
-        figsize=(6 * len(player_names), 7),
+        n_rows,
+        n_cols,
+        figsize=(5.5 * n_cols, 7 * n_rows),
         squeeze=False,
         facecolor="#111111",
     )
-    axes = axes[0]
+    flat_axes = axes.ravel()
 
     x_range = [-FIELD_X - 200, FIELD_X + 200]
     y_range = [-FIELD_Y - GOAL_DEPTH - 200, FIELD_Y + GOAL_DEPTH + 200]
 
-    for ax, player in zip(axes, player_names):
+    for ax, player in zip(flat_axes, player_names):
         player_df = df[df["player_name"] == player]
+
+        if player_df.empty:
+            ax.axis("off")
+            continue
 
         heatmap, xedges, yedges = np.histogram2d(
             player_df["loc_x"],
@@ -41,9 +50,7 @@ def show_player_position_heatmaps(player_names: List[str], df: DataFrame):
         )
 
         heatmap = gaussian_filter(heatmap, sigma=1)
-        heatmap = np.ma.masked_where(
-            ~playable_area_mask(xedges, yedges), heatmap
-        )
+        heatmap = np.ma.masked_where(~playable_area_mask(xedges, yedges), heatmap)
 
         ax.imshow(
             heatmap.T,
@@ -64,6 +71,9 @@ def show_player_position_heatmaps(player_names: List[str], df: DataFrame):
         ax.set_ylim(y_range)
         ax.axis("off")
         ax.set_title(player, color="white", fontsize=14, pad=10)
+
+    for extra_ax in flat_axes[len(player_names) :]:
+        extra_ax.axis("off")
 
     plt.tight_layout()
     plt.show()

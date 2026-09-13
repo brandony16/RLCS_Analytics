@@ -106,7 +106,7 @@ def draw_rl_pitch(ax, line_color="white", lw=1.5, alpha=0.7):
 
 
 def playable_area_mask(xedges, yedges):
-    """Return a mask for the chamfered arena and its two goal rectangles."""
+    """Return a mask for the arena and its goals"""
     x_centers = (xedges[:-1] + xedges[1:]) / 2
     y_centers = (yedges[:-1] + yedges[1:]) / 2
     x_grid, y_grid = np.meshgrid(x_centers, y_centers, indexing="ij")

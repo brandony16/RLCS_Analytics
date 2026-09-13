@@ -6,10 +6,14 @@ import pandas as pd
 
 from src.analysis.aggregation import generate_frame_stats
 from src.analysis.scoreboard import get_detailed_scoreboard, print_scoreboard
-from src.visualization.charts import show_speed_by_player_graph
+from src.visualization.charts import (
+    show_player_distance_to_ball_graph,
+    show_speed_by_player_graph,
+)
 from src.visualization.heatmaps import show_player_position_heatmaps
 from src.visualization.terminal import print_frame_stats
-
+from src.analysis.touches import get_touch_df
+import matplotlib.pyplot as plt
 
 def main():
     parser = argparse.ArgumentParser(description="Rocket League Analytics Pipeline")
@@ -27,12 +31,10 @@ def main():
 
     print(f"--- Analyzing Match: {args.match_guid} ---")
 
-    # 1. Get Scoreboard
     scoreboard_df = get_detailed_scoreboard(metadata_path)
     print("\nOfficial Scoreboard:")
     print_scoreboard(scoreboard_df)
 
-    # 2. Add Physics Stats (To be implemented)
     with open(metadata_path, "r", encoding="utf-8") as f:
         data: Dict[str, Any] = json.load(f)
     events = data.get("events", [])
@@ -41,7 +43,9 @@ def main():
     calculated_stats = generate_frame_stats(df_frames, events=events)
     print_frame_stats(calculated_stats)
 
-    show_player_position_heatmaps(["zen", "Atow", "vatira"], df_frames)
+    show_player_distance_to_ball_graph(df_frames, ["zen"] )
+    # show_player_position_heatmaps(["zen", "Atow", "vatira", "Ball"], df_frames)
+    # show_player_distance_to_ball_graph(df_frames, ["zen"])
     # show_speed_by_player_graph(df_frames, events, ["Atow"])
     # show_boost_by_player_graph(df_frames, events, ["Atow", "zen"])
 

@@ -4,6 +4,8 @@ from matplotlib.ticker import FuncFormatter
 from pandas import DataFrame
 
 from src.analysis.speed import calculate_speeds
+from constants import MAX_TOUCH_DIST
+from src.analysis.touches import get_player_distance_to_ball_df
 
 
 def show_boost_by_player_graph(
@@ -83,6 +85,38 @@ def show_speed_by_player_graph(
     plt.xlabel("Time")
     plt.ylabel("Speed (uu/s)")
     plt.title("Speed Over Time")
+    plt.legend()
+    plt.show()
+
+
+def show_player_distance_to_ball_graph(
+    df: DataFrame, player_names: List[str], impulse_window: int = 2
+):
+    """Plot player-ball distance over time for touch-detector debugging."""
+    distance_df = get_player_distance_to_ball_df(
+        df, impulse_window=impulse_window
+    )
+    if distance_df.empty:
+        return
+
+    for player, player_df in distance_df.groupby("player_name"):
+        if player in player_names:
+            plt.plot(
+                player_df["game_time"],
+                player_df["dist_to_ball"],
+                label=player,
+            )
+
+    plt.axhline(
+        y=MAX_TOUCH_DIST,
+        color="red",
+        linestyle=":",
+        label="Touch distance",
+    )
+    plt.gca().xaxis.set_major_formatter(FuncFormatter(lambda x, pos: _format_time(x)))
+    plt.xlabel("Time")
+    plt.ylabel("Distance to ball (uu)")
+    plt.title("Player Distance to Ball")
     plt.legend()
     plt.show()
 
