@@ -24,3 +24,4 @@ def generate_frame_stats(df: DataFrame, events=None):
     )
 
     return df_out.round(2)
+

@@ -6,7 +6,8 @@ import pandas as pd
 
 from src.analysis.aggregation import generate_frame_stats
 from src.analysis.scoreboard import get_detailed_scoreboard, print_scoreboard
-from src.visualization.plots import show_speed_by_player_graph
+from src.visualization.charts import show_speed_by_player_graph
+from src.visualization.heatmaps import show_player_position_heatmaps
 from src.visualization.terminal import print_frame_stats
 
 
@@ -40,7 +41,8 @@ def main():
     calculated_stats = generate_frame_stats(df_frames, events=events)
     print_frame_stats(calculated_stats)
 
-    show_speed_by_player_graph(df_frames, events, ["Atow"])
+    show_player_position_heatmaps(["zen", "Atow", "vatira"], df_frames)
+    # show_speed_by_player_graph(df_frames, events, ["Atow"])
     # show_boost_by_player_graph(df_frames, events, ["Atow", "zen"])
 
 
