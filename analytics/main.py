@@ -9,6 +9,7 @@ from src.analysis.scoreboard import get_detailed_scoreboard, print_scoreboard
 from src.visualization.charts import (
     show_player_distance_to_ball_graph,
     show_speed_by_player_graph,
+    show_boost_by_player_graph
 )
 from src.visualization.heatmaps import show_player_position_heatmaps
 from src.visualization.terminal import print_frame_stats
@@ -43,11 +44,11 @@ def main():
     calculated_stats = generate_frame_stats(df_frames, events=events)
     print_frame_stats(calculated_stats)
 
-    show_player_distance_to_ball_graph(df_frames, ["zen"] )
-    # show_player_position_heatmaps(["zen", "Atow", "vatira", "Ball"], df_frames)
-    # show_player_distance_to_ball_graph(df_frames, ["zen"])
-    # show_speed_by_player_graph(df_frames, events, ["Atow"])
-    # show_boost_by_player_graph(df_frames, events, ["Atow", "zen"])
+    # show_player_distance_to_ball_graph(df_frames, ["zen"] )
+    show_player_position_heatmaps(["zen", "Atow", "vatira", "ExoTiiK", "juicy", "stizzy"], df_frames)
+    show_player_distance_to_ball_graph(df_frames, ["zen"])
+    show_speed_by_player_graph(df_frames, events, ["zen"])
+    show_boost_by_player_graph(df_frames, events, ["zen"])
 
 
 if __name__ == "__main__":

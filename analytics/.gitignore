@@ -1,12 +1,11 @@
 # Ignore all data files
-data/raw/*.replay
+data/replays/*.replay
 data/json/*.json
 data/processed/*.csv
 data/processed/*.parquet
 
 # keep a game for testing
-# !data/raw/sample_game.replay
-# !data/processed/sample_game.csv
+!data/replays/KC_VIT_PARIS_G4.replay
 
 # Python environment
 __pycache__/
