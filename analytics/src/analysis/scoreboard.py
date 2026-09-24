@@ -2,6 +2,7 @@ import json
 import pandas as pd
 from typing import Dict, List, Any
 from constants import ORANGE_TEAM, BLUE_TEAM
+from src.domain.models import ScoreboardTable
 
 
 def flatten_player_stats(
@@ -34,7 +35,7 @@ def flatten_player_stats(
     return flattened
 
 
-def get_detailed_scoreboard(metadata_json_path: str) -> pd.DataFrame:
+def get_detailed_scoreboard(metadata_json_path: str) -> ScoreboardTable:
     """
     Parses the metadata JSON and returns the official scoreboard as a DataFrame.
     """
@@ -54,10 +55,10 @@ def get_detailed_scoreboard(metadata_json_path: str) -> pd.DataFrame:
     if not df.empty:
         df = df.sort_values(by="score", ascending=False).reset_index(drop=True)
 
-    return df
+    return ScoreboardTable(df)
 
 
-def print_scoreboard(scoreboard_df: pd.DataFrame):
+def print_scoreboard(scoreboard_df: ScoreboardTable):
     """
     Prints out the scoreboard result from get_detailed_scoreboard in a formatted
     and more readable way.

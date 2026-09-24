@@ -44,11 +44,11 @@ def main():
     calculated_stats = generate_frame_stats(df_frames, events=events)
     print_frame_stats(calculated_stats)
 
-    # show_player_distance_to_ball_graph(df_frames, ["zen"] )
-    show_player_position_heatmaps(["zen", "Atow", "vatira", "ExoTiiK", "juicy", "stizzy"], df_frames)
-    show_player_distance_to_ball_graph(df_frames, ["zen"])
-    show_speed_by_player_graph(df_frames, events, ["zen"])
-    show_boost_by_player_graph(df_frames, events, ["zen"])
+    show_player_distance_to_ball_graph(df_frames, ["zen"] )
+    # show_player_position_heatmaps(["zen", "Atow", "vatira", "ExoTiiK", "juicy", "stizzy"], df_frames)
+    # show_player_distance_to_ball_graph(df_frames, ["zen"])
+    # show_speed_by_player_graph(df_frames, events, ["zen"])
+    # show_boost_by_player_graph(df_frames, events, ["zen"])
 
 
 if __name__ == "__main__":

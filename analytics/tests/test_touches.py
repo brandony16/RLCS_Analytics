@@ -1,6 +1,8 @@
 import pandas as pd
+import pytest
 
 from src.analysis.touches import get_touch_df
+from src.domain.models import FrameTable, TouchTable
 
 
 def _frame(frame, player_name, velocity_x, ball=False):
@@ -58,3 +60,31 @@ def test_post_impact_proximity_is_not_counted_as_a_touch():
     touches = get_touch_df(pd.DataFrame(rows), impulse_window=1)
 
     assert touches.empty
+
+
+def test_frame_table_validates_required_columns():
+    df = pd.DataFrame([
+        {"frame": 1, "player_name": "Player", "loc_x": 0.0, "loc_y": 0.0}
+    ])
+
+    with pytest.raises(ValueError, match="Missing required columns"):
+        FrameTable(df)
+
+
+def test_touch_table_preserves_dataframe_accessors():
+    df = pd.DataFrame([
+        {
+            "frame": 1,
+            "player_name": "Player",
+            "dist_to_ball": 10.0,
+            "impact_frame": 1,
+            "impact_impulse": 300.0,
+        }
+    ])
+
+    touches = TouchTable(df)
+
+    assert len(touches) == 1
+    assert touches.df.iloc[0]["player_name"] == "Player"
+    assert touches["dist_to_ball"].iloc[0] == 10.0
+    assert touches.player_name.iloc[0] == "Player"

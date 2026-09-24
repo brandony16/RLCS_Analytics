@@ -3,6 +3,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from constants import MAX_TOUCH_DIST, MIN_IMPULSE
+from src.domain.models import FrameTable, TouchTable
 
 
 def get_touch_df(
@@ -11,7 +12,7 @@ def get_touch_df(
     min_impulse: float = MIN_IMPULSE,
     impulse_window: int = 2,
     cluster_gap: int = 6,
-) -> DataFrame:
+) -> TouchTable:
     """
     Estimate discrete player-ball touches from frame-level replay data.
 
@@ -26,7 +27,7 @@ def get_touch_df(
     car_df = df[~ball_mask].copy()
 
     if ball_df.empty or car_df.empty:
-        return pd.DataFrame()
+        return TouchTable(pd.DataFrame())
 
     merged = get_player_distance_to_ball_df(df, impulse_window=impulse_window)
 
@@ -44,7 +45,7 @@ def get_touch_df(
     ].copy()
 
     if candidates.empty:
-        return pd.DataFrame()
+        return TouchTable(pd.DataFrame())
 
     # For a 50/50, only the closest player owns the frame-level candidate.
     candidates = (
@@ -72,12 +73,12 @@ def get_touch_df(
         .reset_index(drop=True)
     )
 
-    return candidates
+    return TouchTable(candidates)
 
 
 def get_player_distance_to_ball_df(
     df: DataFrame, impulse_window: int = 2
-) -> DataFrame:
+) -> FrameTable:
     """Return player-ball distances with ball motion context for debugging."""
     ball_mask = df["player_name"] == "Ball"
     ball_df = df[ball_mask].copy()
@@ -90,9 +91,10 @@ def get_player_distance_to_ball_df(
     processed_ball = _process_ball_df(
         ball_df, min_frame, max_frame, impulse_window
     )
-    return _add_distance_to_ball(
+    merged = _add_distance_to_ball(
         car_df.merge(processed_ball.reset_index(), on="frame", how="inner")
     )
+    return FrameTable(merged)
 
 
 def _add_distance_to_ball(merged: DataFrame) -> DataFrame:

@@ -1,8 +1,9 @@
 from pandas import DataFrame
 from src.analysis.boost import calculate_boost_usage
 from src.analysis.speed import calculate_speeds
+from src.domain.models import AggregateStatsTable
 
-def generate_frame_stats(df: DataFrame, events=None):
+def generate_frame_stats(df: DataFrame, events=None) -> AggregateStatsTable:
     """
     Generates basic stats from the frame-by-frame dataframe.
     These stats include:
@@ -23,5 +24,5 @@ def generate_frame_stats(df: DataFrame, events=None):
         avg_speed_uu=("speed_uu", "mean"),
     )
 
-    return df_out.round(2)
+    return AggregateStatsTable(df_out.round(2))
 
