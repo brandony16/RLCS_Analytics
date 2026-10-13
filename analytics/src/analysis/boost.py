@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Any, Dict, Iterable, Optional
 
+from src.domain.models import FrameAnalysisTable
+
 
 def _reset_frames(events: Optional[Iterable[Dict[str, Any]]]) -> np.ndarray:
     if not events:
@@ -19,13 +21,14 @@ def calculate_boost_usage(
     df: pd.DataFrame,
     events: Optional[Iterable[Dict[str, Any]]] = None,
     max_boost_drop: float = 40.0,
-) -> pd.DataFrame:
+) -> FrameAnalysisTable:
     """
     Calculates the amount of boost spent frame-to-frame, filtering out
     impossible drops caused by lag or demo respawns
     Adds columns named boost_used and boost_diff
     """
-    df_out = df.copy()
+    df_in = df.to_df() if hasattr(df, "to_df") else df.copy()
+    df_out = df_in.copy()
     reset_frames = _reset_frames(events)
 
     # Work in player/frame order so reset boundaries are detected even when
@@ -58,4 +61,5 @@ def calculate_boost_usage(
         is_valid_usage, ordered["boost_diff"].abs(), 0.0
     )
 
-    return ordered.drop(columns=["previous_boost", "previous_frame"]).sort_index()
+    result = ordered.drop(columns=["previous_boost", "previous_frame"]).sort_index()
+    return FrameAnalysisTable(result)

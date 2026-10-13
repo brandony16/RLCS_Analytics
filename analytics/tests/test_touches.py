@@ -2,7 +2,8 @@ import pandas as pd
 import pytest
 
 from src.analysis.touches import get_touch_df
-from src.domain.models import FrameTable, TouchTable
+from src.analysis.shots import get_shots
+from src.domain.models import FrameTable, ShotTable, TouchTable
 
 
 def _frame(frame, player_name, velocity_x, ball=False):
@@ -88,3 +89,43 @@ def test_touch_table_preserves_dataframe_accessors():
     assert touches.df.iloc[0]["player_name"] == "Player"
     assert touches["dist_to_ball"].iloc[0] == 10.0
     assert touches.player_name.iloc[0] == "Player"
+
+
+def test_shot_table_contracts_are_explicit_and_autocomplete_friendly():
+    df = pd.DataFrame([
+        {
+            "frame": 10,
+            "player_name": "Player",
+            "team": "blue",
+            "goal_y": 1000.0,
+            "ball_vy": 500.0,
+            "dist_to_ball": 25.0,
+            "impact_frame": 10,
+            "impact_impulse": 300.0,
+        }
+    ])
+
+    shots = ShotTable(df)
+
+    assert shots.player_name.iloc[0] == "Player"
+    assert shots.goal_y.iloc[0] == 1000.0
+    assert shots.ball_vy.iloc[0] == 500.0
+
+
+def test_get_shots_returns_a_shot_table():
+    touch_df = pd.DataFrame([
+        {
+            "frame": 10,
+            "player_name": "Player",
+            "team": "blue",
+            "ball_vy": 500.0,
+            "dist_to_ball": 25.0,
+            "impact_frame": 10,
+            "impact_impulse": 300.0,
+        }
+    ])
+
+    shots = get_shots(touch_df, {"Player": "blue"})
+
+    assert isinstance(shots, ShotTable)
+    assert len(shots) == 1

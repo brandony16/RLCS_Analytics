@@ -204,6 +204,43 @@ class FrameTable(SchemaTable):
         return self.df.get("ball_speed", pd.Series(index=self.df.index, dtype="float64"))
 
 
+class FrameAnalysisTable(SchemaTable):
+    """Frame-level analysis data.
+
+    This table sits in the middle of the pipeline: every row still represents a
+    frame, but not every step has populated the same derived columns yet. The
+    contract is intentionally permissive so analysis stages can validate the
+    columns they actually need without pretending a partial intermediate frame is
+    a complete post-analysis table.
+    """
+
+    required_columns = ()
+
+    @property
+    def frame(self) -> pd.Series:
+        return self.df.get("frame", pd.Series(index=self.df.index, dtype="int64"))
+
+    @property
+    def time(self) -> pd.Series:
+        return self.df.get("time", pd.Series(index=self.df.index, dtype="float64"))
+
+    @property
+    def player_name(self) -> pd.Series:
+        return self.df.get("player_name", pd.Series(index=self.df.index, dtype="object"))
+
+    @property
+    def boost_used(self) -> pd.Series:
+        return self.df.get("boost_used", pd.Series(index=self.df.index, dtype="float64"))
+
+    @property
+    def speed_uu(self) -> pd.Series:
+        return self.df.get("speed_uu", pd.Series(index=self.df.index, dtype="float64"))
+
+    @property
+    def speed_kmh(self) -> pd.Series:
+        return self.df.get("speed_kmh", pd.Series(index=self.df.index, dtype="float64"))
+
+
 class TouchTable(SchemaTable):
     """Player-ball contact episodes derived from frame-level tracking data."""
 
@@ -334,6 +371,10 @@ class ShotTable(SchemaTable):
         "player_name",
         "team",
         "goal_y",
+        "ball_vy",
+        "dist_to_ball",
+        "impact_frame",
+        "impact_impulse",
     )
 
     @property
@@ -351,3 +392,19 @@ class ShotTable(SchemaTable):
     @property
     def goal_y(self) -> pd.Series:
         return self.df["goal_y"]
+
+    @property
+    def ball_vy(self) -> pd.Series:
+        return self.df["ball_vy"]
+
+    @property
+    def dist_to_ball(self) -> pd.Series:
+        return self.df["dist_to_ball"]
+
+    @property
+    def impact_frame(self) -> pd.Series:
+        return self.df["impact_frame"]
+
+    @property
+    def impact_impulse(self) -> pd.Series:
+        return self.df["impact_impulse"]
