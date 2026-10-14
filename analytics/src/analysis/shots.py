@@ -6,7 +6,9 @@ import numpy as np
 from src.domain.models import ShotTable, TouchTable, FrameTable
 
 
-def get_shots(touch_df: TouchTable | DataFrame, name_to_team: dict, frame_df: FrameTable) -> ShotTable:
+def get_shots(
+    touch_df: TouchTable | DataFrame, name_to_team: dict, frame_df: FrameTable
+) -> ShotTable:
     shots = []
     df = touch_df.df if isinstance(touch_df, TouchTable) else touch_df
 
@@ -42,24 +44,25 @@ def get_shots(touch_df: TouchTable | DataFrame, name_to_team: dict, frame_df: Fr
 
     shot_df = pd.DataFrame(shots)
     if shot_df.empty:
-        return ShotTable(pd.DataFrame(columns=[
-            "frame",
-            "player_name",
-            "team",
-            "goal_y",
-            "ball_vy",
-            "dist_to_ball",
-            "impact_frame",
-            "impact_impulse",
-        ]))
+        return ShotTable(
+            pd.DataFrame(
+                columns=[
+                    "frame",
+                    "player_name",
+                    "team",
+                    "goal_y",
+                    "ball_vy",
+                    "dist_to_ball",
+                    "impact_frame",
+                    "impact_impulse",
+                ]
+            )
+        )
 
     return ShotTable(shot_df)
 
-def near_orange_net(touch_df: TouchTable, frame_df: FrameTable, name_to_team: dict):
-    Z_BOUND = (0, C.GOAL_HEIGHT + 4 * C.BALL_RADIUS)
-    X_BOUND = (-C.GOAL_WIDTH - 4 * C.BALL_RADIUS, C.GOAL_WIDTH + 4 * C.BALL_RADIUS)
-    Y_BOUND = (C.FIELD_Y - C.CORNER_OFFSET * 2, C.FIELD_Y)
 
+def near_net(touch_df: TouchTable, frame_df: FrameTable, name_to_team: dict, team: int):
     touches = touch_df.df.reset_index(drop=True)
     frames = frame_df.df
 
@@ -69,23 +72,33 @@ def near_orange_net(touch_df: TouchTable, frame_df: FrameTable, name_to_team: di
     bz = frames["ball_z"].to_numpy()
     bvy = frames["ball_vy"].to_numpy()
 
-    in_orange_box = (
-        (X_BOUND[0] <= bx)
-        & (bx <= X_BOUND[1])
-        & (Y_BOUND[0] <= by)
-        & (by <= Y_BOUND[1])
-        & (Z_BOUND[0] <= bz)
-        & (bz <= Z_BOUND[1])
+    is_orange = team == C.ORANGE_TEAM
+    target_y = C.FIELD_Y if is_orange else -C.FIELD_Y
+    team_str = "orange" if is_orange else "blue"
+
+    # cylindrical bounding box
+    MAX_Z = C.GOAL_HEIGHT * 2
+    THREAT_RADIUS = 2000
+    clamped_x = np.clip(bx, -C.GOAL_HALF_WIDTH, C.GOAL_HALF_WIDTH)
+
+    # 2D distance squared from the closest point on the goal line
+    dist_xy_sq = (bx - clamped_x) ** 2 + (by - target_y) ** 2
+
+    # check if within distance radius and acceptable height
+    in_box = (
+        (dist_xy_sq <= THREAT_RADIUS**2)
+        & (bz >= 0)
+        & (bz <= MAX_Z)
     )
 
-    # Transisitions from out of box to in box
-    entered_box = in_orange_box & ~np.concatenate(([False], in_orange_box[:-1]))
+    # detect edge transitions from not in box to in box
+    entered_box = in_box & ~np.concatenate(([False], in_box[:-1]))
 
     candidate_entries = []
     for i in range(len(touches)):
         touch = touches.iloc[i]
 
-        if name_to_team.get(touch["player_name"]) == "orange":
+        if name_to_team.get(touch["player_name"]) == team_str:
             continue
 
         start_frame = touch["frame"]
@@ -94,25 +107,25 @@ def near_orange_net(touch_df: TouchTable, frame_df: FrameTable, name_to_team: di
         else:
             end_frame = frame_numbers[-1] + 1
 
-        touch_window = (frame_numbers >= start_frame) & (frame_numbers < end_frame)
-        window_indices = np.where(touch_window)[0]
+        start_idx = np.searchsorted(frame_numbers, start_frame)
+        end_idx = np.searchsorted(frame_numbers, end_frame)
 
-        if len(window_indices) == 0:
+        if start_idx >= end_idx:
             continue
 
-        start_idx = window_indices[0]
+        # find all boundary entries within this slice
+        window_crossings = np.where(entered_box[start_idx:end_idx])[0] + start_idx
+        entry_indices = list(window_crossings)
 
-        # find all times ball went from not in box to in box for this window
-        crossing_mask = touch_window & entered_box
-        entry_indices = list(np.where(crossing_mask)[0])
-
-        # handle edge case where ball was already in the box at the touch
-        if in_orange_box[start_idx] and start_idx not in entry_indices:
+        # Edge case: ball was already in the threat zone at the moment of touch
+        if in_box[start_idx] and start_idx not in entry_indices:
             entry_indices.insert(0, start_idx)
 
-        # filter out times where the ball is moving away from the net (-y vel)
+        # filter out entries moving away from the net as they cant be shots
         for idx in entry_indices:
-            if bvy[idx] > 0:
+            toward_net = (bvy[idx] > 0) if is_orange else (bvy[idx] < 0)
+
+            if toward_net:
                 candidate_entries.append(
                     {
                         "touch_frame": start_frame,
@@ -120,10 +133,8 @@ def near_orange_net(touch_df: TouchTable, frame_df: FrameTable, name_to_team: di
                         "player_name": touch["player_name"],
                         "ball_pos": (bx[idx], by[idx], bz[idx]),
                         "ball_vel_y": bvy[idx],
-                        # Flag whether this was the hit itself or a later entry
                         "is_initial_touch": (idx == start_idx),
                     }
                 )
 
     return candidate_entries
-        
